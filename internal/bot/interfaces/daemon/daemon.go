@@ -5,7 +5,12 @@ import (
 	"os"
 )
 
-type Daemon struct {
+type Daemon interface {
+	Start() <-chan error
+	Listen() <-chan []byte
+}
+
+type daemon struct {
 	ctx  context.Context
 	File *os.File
 }
@@ -14,17 +19,17 @@ type NewAndRunArgs struct {
 	Context context.Context
 }
 
-func NewAndRun(args NewAndRunArgs) *Daemon {
-	daemon := &Daemon{
+func NewAndRun(args NewAndRunArgs) Daemon {
+	daemon := &daemon{
 		ctx: args.Context,
 	}
 	return daemon
 }
 
-func (d *Daemon) Start() <-chan error {
+func (d *daemon) Start() <-chan error {
 	return nil
 }
 
-func (d *Daemon) Listen() <-chan string {
+func (d *daemon) Listen() <-chan []byte {
 	return nil
 }

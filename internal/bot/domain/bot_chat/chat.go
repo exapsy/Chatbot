@@ -23,7 +23,7 @@ func NewChatId() ChatId {
 
 type Chat struct {
 	id              ChatId
-	history         []string
+	history         [][]byte
 	historyCapacity uint16
 }
 
@@ -33,7 +33,7 @@ type Args struct {
 
 func New(args Args) *Chat {
 	chatId := NewChatId()
-	history := make([]string, args.HistoryCapacity)
+	history := make([][]byte, args.HistoryCapacity)
 	return &Chat{
 		id:              chatId,
 		history:         history,
@@ -41,7 +41,7 @@ func New(args Args) *Chat {
 	}
 }
 
-func (c *Chat) AppendAnswer(answer string) {
+func (c *Chat) AppendAnswer(answer []byte) {
 	if uint16(len(c.history)) > c.historyCapacity {
 		curHistorySize := len(c.history)
 		c.history = c.history[:curHistorySize-1]

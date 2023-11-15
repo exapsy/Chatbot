@@ -14,17 +14,22 @@ const (
 )
 
 type Prompt struct {
-	ChatId bot_chat.ChatId
+	Chat *bot_chat.Chat
+	Msg  string
+}
+
+type Prompter interface {
+	Start() error
+	Prompt(prompt *Prompt) (answer <-chan []byte, err error)
 }
 
 // Prompter is the engine that compiles the strings into answers
-type Prompter struct {
+type prompter struct {
 	ctx context.Context
 	// queue is used to store
 	// the int that is hash for the user that prompts a string,
 	// string is the prompt
 	queue         chan *Prompt
-	chats         *bot_chat.Chats
 	m             sync.RWMutex
 	workers       Workers
 	promptTimeout time.Duration
@@ -39,7 +44,7 @@ type Args struct {
 	ChatsCapacity     uint16
 }
 
-func New(args Args) *Prompter {
+func New(args Args) Prompter {
 	if args.ChatsCapacity == 0 {
 		args.ChatsCapacity = DefaultChatsCapacity
 	}
@@ -48,52 +53,44 @@ func New(args Args) *Prompter {
 		args.HistoryCapacity = DefaultHistoryCapacity
 	}
 
-	chats := bot_chat.NewChats(bot_chat.ChatsArgs{
-		Capacity: args.ChatsCapacity,
-	})
-
-	return &Prompter{
+	return &prompter{
 		ctx:           args.Context,
 		queue:         make(chan *Prompt, args.PromptQueueBuffer),
-		chats:         chats,
 		workers:       NewWorkers(args.WorkersAmount),
 		promptTimeout: args.PromptTimeout,
 	}
 }
 
-func (p *Prompter) Start() error {
-	go func() {
-	outerloop:
-		for {
-			select {
-			case prompt := <-p.queue:
-				answerChan := p.waitWorkerToPrompt(prompt)
-				timeoutTicker := time.NewTicker(p.promptTimeout)
-			answerLoop:
-				for {
-					select {
-					case <-timeoutTicker.C:
-						break answerLoop
-					case <-p.ctx.Done():
-						break outerloop
-					case answer := <-answerChan:
-						chat := p.chats.Get(prompt.ChatId)
-						if chat == nil {
-							fmt.Printf("error: could not find chat with id %q", prompt.ChatId)
-							continue
-						}
+func (p *prompter) Start() error {
+	go p.accept_prompts()
 
-						chat.AppendAnswer(answer)
-					}
-				}
-			}
-		}
-	}()
 	return nil
 }
 
-func (p *Prompter) waitWorkerToPrompt(prompt *Prompt) (answer <-chan string) {
-	answer = make(<-chan string)
+func (p *prompter) accept_prompts() {
+outerloop:
+	for {
+		select {
+		case prompt := <-p.queue:
+			answerChan := p.waitWorkerToPrompt(prompt)
+			timeoutTicker := time.NewTicker(p.promptTimeout)
+		answerLoop:
+			for {
+				select {
+				case <-timeoutTicker.C:
+					break answerLoop
+				case <-p.ctx.Done():
+					break outerloop
+				case answer := <-answerChan:
+					prompt.Chat.AppendAnswer(answer)
+				}
+			}
+		}
+	}
+}
+
+func (p *prompter) waitWorkerToPrompt(prompt *Prompt) (answer <-chan []byte) {
+	answer = make(<-chan []byte)
 	// wait for any worker to be free
 	go func() {
 
@@ -101,8 +98,8 @@ func (p *Prompter) waitWorkerToPrompt(prompt *Prompt) (answer <-chan string) {
 	return answer
 }
 
-func (p *Prompter) Prompt(chatId bot_chat.ChatId, prompt *Prompt) (answer <-chan string, err error) {
-	answer = make(chan string)
+func (p *prompter) Prompt(prompt *Prompt) (answer <-chan []byte, err error) {
+	answer = make(chan []byte)
 	p.queue <- prompt
 	return answer, err
 }

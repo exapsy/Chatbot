@@ -19,3 +19,26 @@ run-bot:
 .PHONY: start
 start: start-browser-ui build-and-run-executable
 	@echo "Starting bot and UI"
+
+.PHONY: compile-docker-bot
+compile-docker-bot:
+	docker build -t exapsy/connectly-interview
+
+.PHONY: compile-docker-web
+compile-docker-web:
+
+.PHONY: compile-docker
+compile-docker: compile-docker-bot compile-docker-web
+
+.PHONY: push-docker-web
+push-docker-bot:
+
+.PHONY: push-docker-web
+push-docker-web:
+
+.PHONY: push-docker
+push-docker:
+
+.PHONY: deploy
+deploy: compile-docker push-docker
+	@echo "deploying ..."

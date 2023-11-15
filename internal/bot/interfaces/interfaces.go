@@ -11,7 +11,7 @@ type Interface interface {
 	// Start starts the communication interface
 	Start() <-chan error
 	// Listen listens to the prompts of the interface
-	Listen() <-chan string
+	Listen() <-chan []byte
 }
 
 // TotalInterfaceTypes keeps track of how many interfaces there are
@@ -27,6 +27,17 @@ const (
 
 type InterfaceTypes struct {
 	types []InterfaceType
+}
+
+func (types InterfaceTypes) HasAny() bool {
+	for i := 0; i < len(types.types); i++ {
+		item := types.types[i]
+		if item != 0 {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (types InterfaceTypes) Has(t InterfaceType) bool {
@@ -51,28 +62,70 @@ func (types InterfaceTypes) run(t InterfaceType) error {
 type Interfaces struct {
 	ctx            context.Context
 	messageQueue   chan string
-	Http_server    *bot_interface_http.Server
-	Daemon         *bot_interface_daemon.Daemon // not ready but an example of an interface
+	Http_server    bot_interface_http.Server
+	Daemon         bot_interface_daemon.Daemon // not ready but an example of an interface
 	interfaceTypes *InterfaceTypes
 }
 
-func New(ctx context.Context) *Interfaces {
-	it := &InterfaceTypes{
-		types: make([]InterfaceType, TotalInterfaceTypes),
-	}
-	return &Interfaces{
-		ctx:            ctx,
-		interfaceTypes: it,
+type Option func(i *Interfaces)
+
+func WithMessageQueueCapacity(cap uint32) Option {
+	return func(i *Interfaces) {
+		i.messageQueue = make(chan string, cap)
 	}
 }
 
-func (b *Interfaces) Listen() {
-	switch {
-	case b.HasHttpServerRunning():
-		b.Http_server.Listen()
-	case b.HasDaemonRunning():
-		b.Daemon.Listen()
+func New(ctx context.Context, opts ...Option) *Interfaces {
+	it := &InterfaceTypes{
+		types: make([]InterfaceType, TotalInterfaceTypes),
 	}
+
+	interfaces := &Interfaces{
+		ctx:            ctx,
+		interfaceTypes: it,
+	}
+
+	for _, o := range opts {
+		o(interfaces)
+	}
+
+	if interfaces.messageQueue == nil {
+		interfaces.messageQueue = make(chan string, 4)
+	}
+
+	return interfaces
+}
+
+// Listen listens to all the interfaces that let the outside world communicate with the bot
+// and writes the prompts that come to the interface's message queue
+func (b *Interfaces) Listen() (prompts <-chan []byte) {
+	if b.HasHttpServerRunning() {
+		promptChan := b.Http_server.Listen()
+		fmt.Printf("listening to http server ...\n")
+		go func() {
+			for {
+				select {
+				case prompt := <-promptChan:
+					b.messageQueue <- string(prompt)
+				}
+			}
+		}()
+	}
+
+	if b.HasDaemonRunning() {
+		promptChan := b.Daemon.Listen()
+		fmt.Printf("listening to daemon socket ...\n")
+		go func() {
+			for {
+				select {
+				case prompt := <-promptChan:
+					b.messageQueue <- string(prompt)
+				}
+			}
+		}()
+	}
+
+	return prompts
 }
 
 // TODO: This design is faulty:
@@ -105,6 +158,7 @@ func (b *Interfaces) InitHttpServer(addr string, certFile *string, keyFile *stri
 }
 
 func (b *Interfaces) StartHttpServer() error {
+	b.Http_server.Start()
 	return nil
 }
 

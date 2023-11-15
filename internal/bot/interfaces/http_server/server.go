@@ -19,7 +19,12 @@ func (e ErrRunBotServer) Error() string {
 	return "could not run bot http_server"
 }
 
-type Server struct {
+type Server interface {
+	Start() <-chan error
+	Listen() <-chan []byte
+}
+
+type server struct {
 	http_server *http.Server
 	ctx         context.Context
 	certFile    *string
@@ -35,14 +40,15 @@ type Server_Args struct {
 	ExtraMiddlewares []http.Handler
 }
 
-func New(args Server_Args) *Server {
+func New(args Server_Args) Server {
 	m := http.NewServeMux()
-	server := &http.Server{
+	s := &http.Server{
 		Addr:    args.Address,
 		Handler: m,
 	}
-	return &Server{
-		http_server: server,
+
+	return &server{
+		http_server: s,
 		ctx:         args.Context,
 		certFile:    args.CertFile,
 		keyFile:     args.KeyFile,
@@ -50,7 +56,7 @@ func New(args Server_Args) *Server {
 	}
 }
 
-func (s *Server) Start() <-chan error {
+func (s *server) Start() <-chan error {
 	var err error
 
 	go func() {
@@ -77,7 +83,7 @@ func (s *Server) Start() <-chan error {
 	return nil
 }
 
-func (s *Server) Listen() <-chan string {
+func (s *server) Listen() <-chan []byte {
 	panic("not implemented")
 	return nil
 }
