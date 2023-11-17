@@ -18,26 +18,21 @@ type LinkedNode[T any] struct {
 }
 
 func NewLinkedList[T any](values ...T) *LinkedNode[T] {
-	root := &LinkedNode[T]{}
-	valuesSize := len(values)
-	if valuesSize > 0 {
-		root.value = values[0]
+	if len(values) == 0 {
+		return nil // Return nil if no values are provided
 	}
 
+	root := &LinkedNode[T]{value: values[0]} // Initialize root with the first value
 	head := root
-	for i := 1; i < valuesSize; i++ {
-		// could use recursion here but, eh, inefficient
-		// better create it on the spot and keep track of the head
-		value := values[i]
 
+	for i := 1; i < len(values); i++ {
 		newNode := &LinkedNode[T]{
-			value: value,
+			value: values[i],
 			next:  nil,
 		}
 
-		head.next = newNode
-		head = newNode
-		head = newNode.next // goes to a nil node which will be assigned on the next iteration above
+		head.next = newNode // Link the new node
+		head = newNode      // Move head to the new node
 	}
 
 	return root
@@ -103,25 +98,44 @@ func (n *DoubleLinkedNode[T]) ChangeValue(newValue T) error {
 }
 
 type Queue[T any] struct {
-	*DoubleLinkedNode[T]
+	head *DoubleLinkedNode[T]
+	tail *DoubleLinkedNode[T]
 }
 
 func NewQueue[T any](values ...T) *Queue[T] {
-	root := &Queue[T]{}
-	valuesSize := len(values)
-	if valuesSize > 0 {
-		root.value = values[0]
+	queue := &Queue[T]{}
+	for _, val := range values {
+		queue.Enqueue(val)
 	}
-
-	root.DoubleLinkedNode = NewDoubleLinkedList(values...)
-
-	return root
+	return queue
 }
 
 func (q *Queue[T]) Enqueue(val T) {
-	panic("not implemented")
+	newNode := &DoubleLinkedNode[T]{value: val}
+	if q.tail != nil {
+		q.tail.next = newNode
+		newNode.previous = q.tail
+	}
+
+	q.tail = newNode
+
+	if q.head == nil {
+		q.head = newNode
+	}
 }
 
-func (q *Queue[T]) Dequeue(val T) {
-	panic("not implemented")
+func (q *Queue[T]) Dequeue() (T, error) {
+	if q.head == nil {
+		var zeroVal T
+		return zeroVal, fmt.Errorf("queue is empty")
+	}
+	dequeuedValue := q.head.value
+	q.head = q.head.next
+	if q.head == nil {
+		q.tail = nil
+	} else {
+		q.head.previous = nil
+	}
+
+	return dequeuedValue, nil
 }
