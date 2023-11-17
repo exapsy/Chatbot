@@ -3,8 +3,8 @@ package bot_app
 import (
 	"connectly-interview/internal/bot/domain/bot_chat"
 	"connectly-interview/internal/bot/domain/bot_prompter"
-	"connectly-interview/internal/bot/infrastructure/bot_infrastructure_kafka"
-	bot_infastructure_kafka_segmentio "connectly-interview/internal/bot/infrastructure/bot_infrastructure_kafka/segmentio"
+	"connectly-interview/internal/bot/infrastructure/kafka"
+	"connectly-interview/internal/bot/infrastructure/kafka/segmentio"
 	"connectly-interview/internal/bot/interfaces"
 	"connectly-interview/internal/bot/types"
 	"context"
@@ -22,15 +22,23 @@ const (
 )
 
 type Bot struct {
-	m          sync.RWMutex
-	ctx        context.Context
-	interfaces *bot_interfaces.Interfaces
-	prompter   bot_prompter.Prompter
-	chats      *bot_chat.Chats
-	bus        bot_infrastructure_kafka.Kafka
+	m            sync.RWMutex
+	ctx          context.Context
+	interfaces   *bot_interfaces.Interfaces
+	prompter     bot_prompter.Prompter
+	chats        *bot_chat.Chats
+	bus          bot_infrastructure_kafka.Kafka
+	openaiApiKey string
 }
 
 type Option func(b *Bot) error
+
+func WithOpenAiKey(key string) Option {
+	return func(b *Bot) error {
+		b.openaiApiKey = key
+		return nil
+	}
+}
 
 func WithHttpServer(addr string) Option {
 	return func(b *Bot) error {

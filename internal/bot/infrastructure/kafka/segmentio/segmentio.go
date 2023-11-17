@@ -1,7 +1,7 @@
 package bot_infastructure_kafka_segmentio
 
 import (
-	"connectly-interview/internal/bot/infrastructure/bot_infrastructure_kafka"
+	"connectly-interview/internal/bot/infrastructure/kafka"
 	"context"
 	"fmt"
 	"github.com/segmentio/kafka-go"
