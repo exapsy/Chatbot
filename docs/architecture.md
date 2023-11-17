@@ -50,6 +50,8 @@ bot {
 
 **Flow (Scenario: user asking something):**
 
+Here's a scenario describing how a User would interact from start to finish and get their response
+
 1. **User**: Asks something in HTTP interface
 2. **Bot-HTTP-interface**: records that to the **Interfaces** message queue
 3. **Bot-Interfaces**: Listen() function returns from a channel the prompt to the bot
@@ -61,6 +63,9 @@ bot {
 9. **Bot-Chat**: records the question and the answer to the history
 10. **Bot-Chat**: sends the answer back to the bus
 11. **Bot-Bus**: records the answer and sends it from the infrastructure to the actual bus (e.g. Mosquito, Kafka, RabbitMQ etc.)
+12. **Bot-interface-T**: (stateful - created routine to wait for an answer) while waiting for the answer from the bus (with a timeout), it will either be send via **Websockets**, Daemon or whatever bidirectional way possible. Obviously HTTP alone (without WS) is not the way.
+13. **User's-client (browser, CLI etc.)**: Reads the message from the daemon/Websocket etc.
+14. **User**: Reads the answer after user's client rendered it on the screen.
 
 ## Send a prompt in a chat
 
@@ -69,6 +74,12 @@ bot {
 **\<interface\>** => look below for pseudocode
 
 ```
+client on UI sends on a websocket
+websocket handles the message
+websocket sends the message down to http
+http sends down to bot
+bot gets the information about the message such as: ChatID, Messenger
+
 if chat does not exist
     create new chat
 
@@ -77,6 +88,9 @@ chatId := get_chat_id()
 answer := send prompt to a worker // answers asychronously or parallel
 
 send_answer_to_chat(chatId)
+chat_sends_answer_to_bus(answer) // Like Kafka, Mosquitto, RabbitMQ
+
+bot reads bus and gets that there's a new response to be send to a chat
 ```
 
 ## Architectural decisions
@@ -100,3 +114,9 @@ send_answer_to_chat(chatId)
     5. **Svelte** allows for a nice UI/UX without too much hassle (compilation of C++ code for Qt Framework, pure JavaScript focusing more on the how you will build the UI and not on how the UI will be etc.)
     6. Other kind of ways such as a CLI or a GUI could access easily the bot through GRPC, Socket Daemon or simple HTTP, but not built yet.
 - **Where is GraphQL???**: No time - but mostly it's redundant. GraphQL is great when you want to connect different entities together, not send redundant information, ask for specific queries etc. But for a chatbot simple as this and for **its scope** (interview), there is no need currently for such support.
+
+### TESTING!
+
+1. Should be done with the `testify/suite` package, you'll encounter how it's being done in some tests already. [Example](../internal/libs/lists/lists_test.go)
+2. Use `interfaces` as much as possible \(!\) to make it possible to make everything testable without having to backwards engineer or implement the actual structure which may not be testable to start with (e.g. a postgres database is not testable by itself, you need a postgres instance, so make an interface for the postgres database so we can test other things later down the line). [Example](../internal/bot/interfaces/interfaces.go)
+3. **Do not return the `struct`**! Return the `interface`. Wrong `type Server interface{}; type server struct {}; func New() *server { return &server{...} }`. Right `type Server interface{}; type server struct {}; func New() Server { return &server{...} }`. Reasoning being, you always know if you actually really implement the interface or you go off the line + it's weird to return the struct when the interface is right there, it exists for a reason let's use it for good practice. [Example](../internal/bot/interfaces/http_server/server.go)
