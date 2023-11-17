@@ -87,63 +87,60 @@ func (b *Bot) Start() error {
 	}
 
 	reqsChan := b.interfaces.Listen()
-	fmt.Printf("listening to interfaces...\n")
-	go func() {
-		wg.Add(1)
-		defer wg.Done()
 
-		// Loop looking over prompt requests
-		for {
-			select {
-			case req := <-reqsChan:
-				// unmarshall msg prompt
-				msg := types.MessageBotPrompt{}
-				err = json.Unmarshal(req, &msg)
-				if err != nil {
-					continue
-				}
+	// Loop looking over prompt requests
+	for {
+		select {
+		case req, closed := <-reqsChan:
+			if closed {
+				fmt.Printf("interfaces channel is closed, returning ...")
+				return nil
+			}
+			// unmarshall msg prompt
+			msg := types.MessageBotPrompt{}
+			err = json.Unmarshal(req, &msg)
+			if err != nil {
+				continue
+			}
 
-				fmt.Printf("got message: %+v\n", msg)
+			fmt.Printf("got message: %+v\n", msg)
 
-				// compile an answer
-				prompt := &bot_prompter.Prompt{}
-				responseChan, err := b.prompter.Prompt(prompt)
-				if err != nil {
-					return
-				}
+			// compile an answer
+			prompt := &bot_prompter.Prompt{}
+			responseChan, err := b.prompter.Prompt(prompt)
+			if err != nil {
+				fmt.Printf("error on prompt %+v: %s", prompt, err)
+			}
 
-				fmt.Printf("got answer for message %q: %q\n", msg, prompt.Msg)
+			fmt.Printf("got answer for message %q: %q\n", msg, prompt.Msg)
 
-				// Wait for response from the prompt
-				go func() {
-					wg.Add(1)
-					defer wg.Done()
-					// TODO:
-					//   should it be configurable?
-					//   Like "ReadPromptTimeout"?
-					//   And shouldn't we cancel the job then to put the prompt's worker at rest?
-					//   Things to think ... second part about the job could change the whole architecture of how workers work, with jobs
-					timeout := time.Second * 10
-					timeoutTicker := time.NewTicker(timeout)
-					for {
-						select {
-						case response := <-responseChan:
-							// Send response to bus
-							err = b.bus.Send(bot_infrastructure_kafka.TopicPrompt, response)
-							if err != nil {
-								fmt.Printf("error sending to msg %q to the bus: %s", err)
-								return
-							}
-						case <-timeoutTicker.C:
+			// Wait for response from the prompt
+			go func() {
+				wg.Add(1)
+				defer wg.Done()
+				// TODO:
+				//   should it be configurable?
+				//   Like "ReadPromptTimeout"?
+				//   And shouldn't we cancel the job then to put the prompt's worker at rest?
+				//   Things to think ... second part about the job could change the whole architecture of how workers work, with jobs
+				timeout := time.Second * 10
+				timeoutTicker := time.NewTicker(timeout)
+				for {
+					select {
+					case response := <-responseChan:
+						// Send response to bus
+						err = b.bus.Send(bot_infrastructure_kafka.TopicPrompt, response)
+						if err != nil {
+							fmt.Printf("error sending to msg %q to the bus: %s", err)
 							return
 						}
+					case <-timeoutTicker.C:
+						return
 					}
-				}()
-			}
+				}
+			}()
 		}
-	}()
-
-	return nil
+	}
 }
 
 func (b *Bot) Prompt(prompt string) error {

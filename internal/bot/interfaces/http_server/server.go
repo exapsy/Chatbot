@@ -20,8 +20,7 @@ func (e ErrRunBotServer) Error() string {
 }
 
 type Server interface {
-	Start() <-chan error
-	Listen() <-chan []byte
+	Listen() (<-chan []byte, <-chan error)
 }
 
 type server struct {
@@ -56,12 +55,28 @@ func New(args Server_Args) Server {
 	}
 }
 
-func (s *server) Start() <-chan error {
+func newMux() *http.ServeMux {
+	m := http.NewServeMux()
+	m.HandleFunc("/ws/", func(w http.ResponseWriter, r *http.Request) {
+
+	})
+	return m
+}
+
+func (s *server) Listen() (reqsChan <-chan []byte, errChan <-chan error) {
+	errChan = make(chan error)
+	reqsChan = make(chan []byte)
 	var err error
 
 	go func() {
 		if s.certFile != nil && s.keyFile != nil {
 			err = s.http_server.ListenAndServeTLS(*s.certFile, *s.keyFile)
+			if err != nil {
+				panic(NewErrRunBotServer(err))
+				return
+			}
+		} else {
+			err = s.http_server.ListenAndServe()
 			if err != nil {
 				panic(NewErrRunBotServer(err))
 				return
@@ -80,10 +95,5 @@ func (s *server) Start() <-chan error {
 		}
 	}()
 
-	return nil
-}
-
-func (s *server) Listen() <-chan []byte {
-	panic("not implemented")
-	return nil
+	return reqsChan, errChan
 }
