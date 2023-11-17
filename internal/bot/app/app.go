@@ -5,6 +5,7 @@ import (
 	"connectly-interview/internal/bot/domain/bot_prompter"
 	"connectly-interview/internal/bot/infrastructure/kafka"
 	"connectly-interview/internal/bot/infrastructure/kafka/segmentio"
+	"connectly-interview/internal/bot/infrastructure/openai"
 	"connectly-interview/internal/bot/interfaces"
 	"connectly-interview/internal/bot/types"
 	"context"
@@ -89,6 +90,12 @@ func (b *Bot) Start() error {
 	var wg sync.WaitGroup
 
 	var err error
+
+	err = openai.Ping(b.openaiApiKey)
+	if err != nil {
+		return fmt.Errorf("could not ping to openai - make sure to provide the OpenAI key and that it is a valid one:\n%w", err)
+	}
+
 	err = b.prompter.Start()
 	if err != nil {
 		return fmt.Errorf("failed to start promtper: %w", err)
