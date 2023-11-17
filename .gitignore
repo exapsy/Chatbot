@@ -24,3 +24,5 @@ go.work
 # Misc
 bin/
 .idea/
+node_modules/
+yarn-error.lock
