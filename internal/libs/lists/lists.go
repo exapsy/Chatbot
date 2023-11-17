@@ -4,6 +4,7 @@ package lists
 
 import (
 	"fmt"
+	"reflect"
 	"sync"
 )
 
@@ -122,6 +123,45 @@ func (q *Queue[T]) Enqueue(val T) {
 	if q.head == nil {
 		q.head = newNode
 	}
+}
+
+// Delete deletes a value from the queue.
+// Expect an O(n) performance, but uses reflect.DeepEqual to compare the values since they're of unknown origin.
+// reflect.DeepEqual is fixable if we make sure that T always has an "IsEqual(other T)" function at least. (note for the future self)
+func (q *Queue[T]) Delete(val T) error {
+	if q.head == nil {
+		return fmt.Errorf("queue is empty")
+	}
+
+	current := q.head
+	for current != nil {
+		areEqual := reflect.DeepEqual(current.value, val)
+		if areEqual {
+			// Case 1: Deleting the head node
+			if current == q.head {
+				q.head = q.head.next
+				if q.head != nil {
+					q.head.previous = nil
+				} else {
+					// The queue becomes empty
+					q.tail = nil
+				}
+			} else {
+				// Case 2: Deleting a middle or tail node
+				current.previous.next = current.next
+				if current.next != nil {
+					current.next.previous = current.previous
+				} else {
+					// Case 2b: Deleting the tail node
+					q.tail = current.previous
+				}
+			}
+			return nil
+		}
+		current = current.next
+	}
+
+	return fmt.Errorf("value not found in queue")
 }
 
 func (q *Queue[T]) Dequeue() (T, error) {
