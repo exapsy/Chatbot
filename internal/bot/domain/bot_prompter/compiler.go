@@ -94,6 +94,11 @@ outerloop:
 	}
 }
 
+// waitWorkerToPrompt sends the prompt to an available worker with round-robin,
+// and returns a channel through the worker will respond to.
+//
+// This approach may not scale well later, it would probably be better to have a completely separate executable for workers,
+// listening to a daemon or getting HTTP requests whenever there's work to do for a worker, it works for now, but to take care later.
 func (p *prompter) waitWorkerToPrompt(prompt *Prompt) <-chan []byte {
 	answerChan := make(chan []byte)
 
