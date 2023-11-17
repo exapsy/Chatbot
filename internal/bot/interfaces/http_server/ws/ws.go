@@ -7,9 +7,10 @@ type Websockets struct {
 	ws *websocket.Server
 }
 
-func New(addr string) *Websockets {
+func New() *Websockets {
 	w := &Websockets{}
 	wsServer := &websocket.Server{}
+	w.ws = wsServer
 
 	return w
 }
