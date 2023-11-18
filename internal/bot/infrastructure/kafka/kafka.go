@@ -12,4 +12,5 @@ const (
 
 type Kafka interface {
 	Send(topic Topic, msg []byte) error
+	Listen(topic Topic) (<-chan []byte, error)
 }

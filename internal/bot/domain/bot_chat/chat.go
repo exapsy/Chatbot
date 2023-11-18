@@ -81,6 +81,30 @@ func (c *Chats) Get(chatId ChatId) *Chat {
 	return chat
 }
 
+func (c *Chats) Delete(chatId ChatId) error {
+	if c.length == 0 {
+		return fmt.Errorf("no chats exist")
+	}
+
+	chat, found := c.items[chatId]
+	if !found {
+		return fmt.Errorf("chat with id %q not found", chatId)
+	}
+
+	// delete from queue
+	err := c.itemsQueue.Delete(chat)
+	if err != nil {
+		return fmt.Errorf("could not delete chat with id %q from the chat queue", chatId)
+	}
+
+	// remove from hashmap
+	delete(c.items, chatId)
+
+	c.length--
+
+	return nil
+}
+
 func (c *Chats) New(historyCapacity uint16) (*Chat, error) {
 	// full capacity reached
 	if c.length >= c.capacity {

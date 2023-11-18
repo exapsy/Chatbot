@@ -169,7 +169,7 @@ func (w *Worker) Compile(prompt string) (string, error) {
 
 	// Prepare the request body
 	requestBody, err := json.Marshal(map[string]string{
-		"model":  "text-davinci-004", // or any other GPT-4 model you want to use
+		"model":  "text-davinci-004",
 		"prompt": prompt,
 	})
 	if err != nil {

@@ -20,6 +20,7 @@ func main() {
 	bot, err := bot_app.New(
 		bot_app.WithOpenAiKey(openaiKey),
 		bot_app.WithHttpServer("localhost:8080"),
+		bot_app.WithNoKafka(),
 	)
 	if err != nil {
 		panic(err)

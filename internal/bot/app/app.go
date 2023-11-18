@@ -4,6 +4,7 @@ import (
 	"connectly-interview/internal/bot/domain/bot_chat"
 	"connectly-interview/internal/bot/domain/bot_prompter"
 	"connectly-interview/internal/bot/infrastructure/kafka"
+	"connectly-interview/internal/bot/infrastructure/kafka/nokafka"
 	"connectly-interview/internal/bot/infrastructure/kafka/segmentio"
 	"connectly-interview/internal/bot/infrastructure/openai"
 	"connectly-interview/internal/bot/interfaces"
@@ -23,13 +24,15 @@ const (
 )
 
 type Bot struct {
-	m            sync.RWMutex
-	ctx          context.Context
-	interfaces   *bot_interfaces.Interfaces
-	prompter     bot_prompter.Prompter
-	chats        *bot_chat.Chats
-	bus          bot_infrastructure_kafka.Kafka
-	openaiApiKey string
+	m              sync.RWMutex
+	ctx            context.Context
+	interfaces     *bot_interfaces.Interfaces
+	prompter       bot_prompter.Prompter
+	chats          *bot_chat.Chats
+	bus            bot_infrastructure_kafka.Kafka
+	openaiApiKey   string
+	newChatChan    <-chan struct{}
+	newChatMsgChan <-chan []byte
 }
 
 type Option func(b *Bot) error
@@ -52,13 +55,30 @@ func WithHttpServer(addr string) Option {
 	}
 }
 
+func WithKafka(addr string) Option {
+	return func(b *Bot) error {
+		kafkaDialer := bot_infastructure_kafka_segmentio.New(b.ctx, addr)
+		b.bus = kafkaDialer
+		return nil
+	}
+}
+
+func WithNoKafka() Option {
+	return func(b *Bot) error {
+		kafkaDialer := bot_infrastructure_kafka_nokafka.NewNoKafka()
+		b.bus = kafkaDialer
+		return nil
+	}
+}
+
 func New(opts ...Option) (*Bot, error) {
 	// bot vars
 	ctx := context.Background()
-	comm_interfaces := bot_interfaces.New(
-		ctx,
-		bot_interfaces.WithMessageQueueCapacity(24),
-	)
+	bot := &Bot{}
+
+	newChatChan := make(chan struct{})
+	newChatMsgChan := make(chan []byte)
+
 	bus := bot_infastructure_kafka_segmentio.New(ctx, "localhost:81")
 	prompter := bot_prompter.New(bot_prompter.Args{
 		Context:           ctx,
@@ -67,13 +87,49 @@ func New(opts ...Option) (*Bot, error) {
 		PromptQueueBuffer: DefaultQueueBuffer,
 		ChatsCapacity:     DefaultChatsCapacity,
 	})
+	chats := bot_chat.NewChats(bot_chat.ChatsArgs{
+		Capacity: 24,
+	})
+	comm_interfaces := bot_interfaces.New(
+		ctx,
+		bot_interfaces.WithMessageQueueCapacity(24),
+		bot_interfaces.WithNewChatHandler(func() {
+			_, err := chats.New(0)
+			if err != nil {
+				fmt.Printf("could not create new chat: %s", err)
+				return
+			}
+			newChatBusMsg := types.Communication_interface_incoming_new_chat{
+				FromUser: "exapsy", // TODO: hard-written ...... we want this to be from the specific user that the chat was made from
+			}
+			err = bus.Send(bot_infrastructure_kafka.TopicPrompt, []byte(newChatBusMsg.Json()))
+			if err != nil {
+				fmt.Printf("could not send : %s\n", err)
+				return
+			}
 
-	bot := &Bot{
-		ctx:        ctx,
-		interfaces: comm_interfaces,
-		bus:        bus,
-		prompter:   prompter,
-	}
+		}),
+		bot_interfaces.WithNewChatMessageHandler(func(chatId bot_chat.ChatId, msg []byte) error {
+			newChatMsgBusMsg := types.Communication_interface_incoming_new_chat_reply{
+				ChatId: chatId,
+				Prompt: string(msg),
+			}
+			err := bus.Send(bot_infrastructure_kafka.TopicPrompt, []byte(newChatMsgBusMsg.Json()))
+			if err != nil {
+				return fmt.Errorf("could not send message %q to bus: %w", string(msg), err)
+			}
+
+			return nil
+		}),
+	)
+
+	bot.chats = chats
+	bot.ctx = ctx
+	bot.interfaces = comm_interfaces
+	bot.bus = bus
+	bot.prompter = prompter
+	bot.newChatMsgChan = newChatMsgChan
+	bot.newChatChan = newChatChan
 
 	// apply options
 	for _, o := range opts {
@@ -112,7 +168,7 @@ func (b *Bot) Start() error {
 				return nil
 			}
 			// unmarshall msg prompt
-			msg := types.MessageBotPrompt{}
+			msg := types.Communication_interface_incoming_msg{}
 			err = json.Unmarshal(req, &msg)
 			if err != nil {
 				continue

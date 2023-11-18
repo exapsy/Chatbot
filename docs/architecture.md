@@ -114,6 +114,12 @@ bot reads bus and gets that there's a new response to be send to a chat
     5. **Svelte** allows for a nice UI/UX without too much hassle (compilation of C++ code for Qt Framework, pure JavaScript focusing more on the how you will build the UI and not on how the UI will be etc.)
     6. Other kind of ways such as a CLI or a GUI could access easily the bot through GRPC, Socket Daemon or simple HTTP, but not built yet.
 - **Where is GraphQL???**: No time - but mostly it's redundant. GraphQL is great when you want to connect different entities together, not send redundant information, ask for specific queries etc. But for a chatbot simple as this and for **its scope** (interview), there is no need currently for such support.
+- **Kafka**??: Why Kafka? Why put a bus in the first place? You've got no time! - Okay, let me explain: A bus allows for
+  future scalability in case we want to make a distribution of microservices that may want to listen to the bus and new
+  messages on the bus whether they're bot messages or anything.
+  - Okay, but why kafka?: That's what's the most efficient for mass messaging. Mosquitto is for smaller quantities and
+    simpler apps while I stand for scalability and flexibility, and rabbitmq is not that efficient for mass messaging
+    and queue messaging.
 
 ### TESTING!
 

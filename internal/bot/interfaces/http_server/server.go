@@ -1,7 +1,10 @@
 package bot_interface_http
 
 import (
+	"connectly-interview/internal/bot/domain/bot_chat"
+	bot_interfaces_http_ws "connectly-interview/internal/bot/interfaces/http_server/ws"
 	"context"
+	"fmt"
 	"net/http"
 )
 
@@ -24,43 +27,67 @@ type Server interface {
 }
 
 type server struct {
-	http_server *http.Server
-	ctx         context.Context
-	certFile    *string
-	keyFile     *string
-	address     string
+	http_server        *http.Server
+	ctx                context.Context
+	certFile           *string
+	keyFile            *string
+	address            string
+	ws                 *bot_interfaces_http_ws.Websockets
+	wsIncomingMsgsChan chan []byte
 }
 
 type Server_Args struct {
-	Context          context.Context
-	Address          string
-	CertFile         *string
-	KeyFile          *string
-	ExtraMiddlewares []http.Handler
+	Context               context.Context
+	Address               string
+	CertFile              *string
+	KeyFile               *string
+	ExtraMiddlewares      []http.Handler
+	NewChatHandler        func()
+	NewChatMessageHandler func(chatId bot_chat.ChatId, msg []byte) error
 }
 
 func New(args Server_Args) Server {
+	server := &server{}
+
+	// region initiate vars
 	m := http.NewServeMux()
-	s := &http.Server{
+
+	// region add endpoints
+
+	wsReceiveChan := make(chan []byte)
+	server.ws = bot_interfaces_http_ws.New(bot_interfaces_http_ws.Args{
+		ReceiveChan:           wsReceiveChan,
+		NewChatHandler:        args.NewChatHandler,
+		NewChatMessageHandler: args.NewChatMessageHandler,
+	})
+	m.HandleFunc("/ws/", server.ws.Handler)
+
+	// endregion
+
+	wsIncomingMsgsChan := make(chan []byte)
+	ws := bot_interfaces_http_ws.New(bot_interfaces_http_ws.Args{
+		ReceiveChan: wsIncomingMsgsChan,
+	})
+	http_server := &http.Server{
 		Addr:    args.Address,
 		Handler: m,
 	}
 
-	return &server{
-		http_server: s,
-		ctx:         args.Context,
-		certFile:    args.CertFile,
-		keyFile:     args.KeyFile,
-		address:     args.Address,
-	}
-}
+	// endregion
 
-func newMux() *http.ServeMux {
-	m := http.NewServeMux()
-	m.HandleFunc("/ws/", func(w http.ResponseWriter, r *http.Request) {
+	// region initiate server values
 
-	})
-	return m
+	server.http_server = http_server
+	server.ctx = args.Context
+	server.certFile = args.CertFile
+	server.keyFile = args.KeyFile
+	server.address = args.Address
+	server.ws = ws
+	server.wsIncomingMsgsChan = wsIncomingMsgsChan
+
+	// endregion
+
+	return server
 }
 
 func (s *server) Listen() (reqsChan <-chan []byte, errChan <-chan error) {
@@ -70,12 +97,14 @@ func (s *server) Listen() (reqsChan <-chan []byte, errChan <-chan error) {
 
 	go func() {
 		if s.certFile != nil && s.keyFile != nil {
+			fmt.Printf("listening http tls server at %q\n", s.address)
 			err = s.http_server.ListenAndServeTLS(*s.certFile, *s.keyFile)
 			if err != nil {
 				panic(NewErrRunBotServer(err))
 				return
 			}
 		} else {
+			fmt.Printf("listening http server at %q\n", s.address)
 			err = s.http_server.ListenAndServe()
 			if err != nil {
 				panic(NewErrRunBotServer(err))

@@ -10,6 +10,7 @@ import (
 
 const (
 	DefaultWriteTimeDuration = time.Second * 10
+	DefaultMaxReadBytes      = 1024 * 1024 // 1 MB
 )
 
 type SegmentioDialer struct {
@@ -65,4 +66,32 @@ func (s *SegmentioDialer) Send(topic bot_infrastructure_kafka.Topic, msg []byte)
 	}
 
 	return nil
+}
+
+func (s *SegmentioDialer) Listen(topic bot_infrastructure_kafka.Topic) (<-chan []byte, error) {
+	var err error
+	var outChan chan []byte = make(chan []byte)
+
+	partition := 0
+
+	conn, err := kafka.DialLeader(s.ctx, "tcp", s.addr, topic.String(), partition)
+	if err != nil {
+		return nil, fmt.Errorf("could not dial kafka: %w", err)
+	}
+
+	err = conn.SetReadDeadline(time.Now().Add(s.writeDeadline))
+	if err != nil {
+		return nil, fmt.Errorf("could not set write deadline: %w", err)
+	}
+
+	message, err := conn.ReadMessage(DefaultMaxReadBytes)
+	if err != nil {
+		return nil, fmt.Errorf("could not read message")
+	}
+
+	go func() {
+		outChan <- message.Value
+	}()
+
+	return outChan, nil
 }

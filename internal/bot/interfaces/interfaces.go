@@ -1,6 +1,7 @@
 package bot_interfaces
 
 import (
+	"connectly-interview/internal/bot/domain/bot_chat"
 	"connectly-interview/internal/bot/interfaces/daemon"
 	"connectly-interview/internal/bot/interfaces/http_server"
 	"context"
@@ -89,7 +90,9 @@ type Interfaces struct {
 	// Daemon is a daemon socket communication interface
 	Daemon bot_interface_daemon.Daemon // not ready but an example of an interface
 	// interfaceTypes keeps which interface types are running
-	interfaceTypes *InterfaceTypes
+	interfaceTypes        *InterfaceTypes
+	newChatHandler        func()
+	newChatMessageHandler func(chatId bot_chat.ChatId, msg []byte) error
 }
 
 type Option func(i *Interfaces)
@@ -97,6 +100,18 @@ type Option func(i *Interfaces)
 func WithMessageQueueCapacity(cap uint32) Option {
 	return func(i *Interfaces) {
 		i.messageQueue = make(chan []byte, cap)
+	}
+}
+
+func WithNewChatHandler(cb func()) Option {
+	return func(i *Interfaces) {
+		i.newChatHandler = cb
+	}
+}
+
+func WithNewChatMessageHandler(cb func(chatId bot_chat.ChatId, msg []byte) error) Option {
+	return func(i *Interfaces) {
+		i.newChatMessageHandler = cb
 	}
 }
 
@@ -178,10 +193,13 @@ func (b *Interfaces) InitHttpServer(addr string, certFile *string, keyFile *stri
 
 	if b.Http_server == nil {
 		b.Http_server = bot_interface_http.New(bot_interface_http.Server_Args{
-			Context:  b.ctx,
-			Address:  addr,
-			CertFile: certFile,
-			KeyFile:  keyFile,
+			Context:               b.ctx,
+			Address:               addr,
+			CertFile:              certFile,
+			KeyFile:               keyFile,
+			ExtraMiddlewares:      nil,
+			NewChatHandler:        b.newChatHandler,
+			NewChatMessageHandler: b.newChatMessageHandler,
 		})
 	}
 
