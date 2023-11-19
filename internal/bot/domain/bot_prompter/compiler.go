@@ -104,7 +104,7 @@ func (p *prompter) waitWorkerToPrompt(prompt *Prompt) <-chan []byte {
 		var selectedWorker *Worker
 		for _, worker := range p.workers {
 			if !worker.IsBusy() {
-				selectedWorker = &worker
+				selectedWorker = worker
 				break
 			}
 		}
@@ -142,7 +142,7 @@ type Worker struct {
 	isBusy    bool
 }
 
-type Workers []Worker
+type Workers []*Worker
 
 func NewWorkers(total_workers uint8) Workers {
 	w := make(Workers, total_workers)
