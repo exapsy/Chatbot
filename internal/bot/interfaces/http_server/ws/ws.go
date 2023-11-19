@@ -8,7 +8,6 @@ import (
 	"golang.org/x/net/websocket"
 	"log"
 	"net/http"
-	"reflect"
 )
 
 type Websockets struct {
@@ -34,6 +33,8 @@ func New(args Args) *Websockets {
 	sendChan := make(chan []byte, 128) // 128 to make hiccups "less visible"
 	w.sendChan = sendChan
 	w.receiveChan = args.ReceiveChan
+	w.newChatHandler = args.NewChatHandler
+	w.newChatMessageHandler = args.NewChatMessageHandler
 
 	return w
 }
@@ -144,7 +145,6 @@ func (websockets *Websockets) processMessage(inMsg InMsg) (*OutMsg, error) {
 	//var err error
 	switch inMsg.MsgType {
 	case MsgTypeIncomingReply:
-		fmt.Printf("%+v,\n\n%q\ntype: %v\n", inMsg.Msg, inMsg, reflect.TypeOf(inMsg.Msg))
 		var jsonMsg IncomingReply
 
 		msg := inMsg.Msg.(map[string]interface{})

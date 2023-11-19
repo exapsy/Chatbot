@@ -1,14 +1,10 @@
 package bot_prompter
 
 import (
-	"bytes"
 	"connectly-interview/internal/bot/domain/bot_chat"
 	"connectly-interview/internal/bot/infrastructure/openai"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"sync"
 	"time"
 )
@@ -34,10 +30,11 @@ type prompter struct {
 	// queue is used to store
 	// the int that is hash for the user that prompts a string,
 	// string is the prompt
-	queue         chan *Prompt
-	m             sync.RWMutex
-	workers       Workers
-	promptTimeout time.Duration
+	queue          chan *Prompt
+	m              sync.RWMutex
+	workers        Workers
+	promptTimeout  time.Duration
+	answersMapChan map[bot_chat.ChatId]chan []byte
 }
 
 type Args struct {
@@ -131,9 +128,11 @@ func (p *prompter) waitWorkerToPrompt(prompt *Prompt) <-chan []byte {
 }
 
 func (p *prompter) Prompt(prompt *Prompt) (answer <-chan []byte, err error) {
-	answer = make(chan []byte)
 	p.queue <- prompt
-	return answer, err
+	chatId := prompt.Chat.Id()
+	promptChan := make(chan []byte)
+	p.answersMapChan[chatId] = promptChan
+	return promptChan, err
 }
 
 type Worker struct {
@@ -166,51 +165,20 @@ func (w *Worker) Compile(prompt string) (string, error) {
 		return "", fmt.Errorf("worker %d is busy", w.id)
 	}
 	w.isBusy = true
+	defer func() {
+		w.isBusy = false
+	}()
 
-	// Prepare the request body
-	requestBody, err := json.Marshal(map[string]string{
-		"model":  "text-davinci-004",
-		"prompt": prompt,
-	})
+	openAiAnswer, err := openai.Prompt(w.openaiKey, prompt)
 	if err != nil {
 		return "", err
 	}
 
-	// Make the HTTP request
-	req, err := http.NewRequest("POST", "https://api.openai.com/v1/engines/text-davinci-004/completions", bytes.NewBuffer(requestBody))
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+w.openaiKey)
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	// Read the response
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
+	if openAiAnswer == "" {
+		return "", fmt.Errorf("no response from GPT-4")
 	}
 
-	var gptResponse openai.GPTResponse
-	err = json.Unmarshal(body, &gptResponse)
-	if err != nil {
-		return "", err
-	}
-
-	// Assuming the first choice is the one we need
-	if len(gptResponse.Choices) > 0 {
-		return gptResponse.Choices[0].Text, nil
-	}
-
-	w.isBusy = false
-
-	return "", fmt.Errorf("no response from GPT-4")
+	return openAiAnswer, nil
 }
 
 type PromptUser struct {

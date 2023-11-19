@@ -16,8 +16,11 @@ type NoKafka struct {
 
 // NewNoKafka creates a new instance of NoKafka
 func NewNoKafka() *NoKafka {
+	channels := map[bot_infrastructure_kafka.Topic]chan []byte{
+		bot_infrastructure_kafka.TopicPrompt: make(chan []byte),
+	}
 	return &NoKafka{
-		channels: make(map[bot_infrastructure_kafka.Topic]chan []byte),
+		channels: channels,
 	}
 }
 

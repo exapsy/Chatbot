@@ -41,6 +41,10 @@ func New(args Args) *Chat {
 	}
 }
 
+func (c *Chat) Id() ChatId {
+	return c.id
+}
+
 func (c *Chat) AppendAnswer(answer []byte) {
 	if uint16(len(c.history)) > c.historyCapacity {
 		curHistorySize := len(c.history)

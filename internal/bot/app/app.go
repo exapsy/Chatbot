@@ -79,7 +79,6 @@ func New(opts ...Option) (*Bot, error) {
 	newChatChan := make(chan struct{})
 	newChatMsgChan := make(chan []byte)
 
-	bus := bot_infastructure_kafka_segmentio.New(ctx, "localhost:81")
 	prompter := bot_prompter.New(bot_prompter.Args{
 		Context:           ctx,
 		PromptTimeout:     DefaultPromptTimeout,
@@ -94,6 +93,11 @@ func New(opts ...Option) (*Bot, error) {
 		ctx,
 		bot_interfaces.WithMessageQueueCapacity(24),
 		bot_interfaces.WithNewChatHandler(func() {
+			if bot.bus == nil {
+				fmt.Printf("no bus found\n")
+				return
+			}
+
 			_, err := chats.New(0)
 			if err != nil {
 				fmt.Printf("could not create new chat: %s", err)
@@ -102,7 +106,7 @@ func New(opts ...Option) (*Bot, error) {
 			newChatBusMsg := types.Communication_interface_incoming_new_chat{
 				FromUser: "exapsy", // TODO: hard-written ...... we want this to be from the specific user that the chat was made from
 			}
-			err = bus.Send(bot_infrastructure_kafka.TopicPrompt, []byte(newChatBusMsg.Json()))
+			err = bot.bus.Send(bot_infrastructure_kafka.TopicPrompt, []byte(newChatBusMsg.Json()))
 			if err != nil {
 				fmt.Printf("could not send : %s\n", err)
 				return
@@ -110,11 +114,23 @@ func New(opts ...Option) (*Bot, error) {
 
 		}),
 		bot_interfaces.WithNewChatMessageHandler(func(chatId bot_chat.ChatId, msg []byte) error {
-			newChatMsgBusMsg := types.Communication_interface_incoming_new_chat_reply{
-				ChatId: chatId,
-				Prompt: string(msg),
+			var err error
+
+			if bot.bus == nil {
+				return fmt.Errorf("no bus found")
 			}
-			err := bus.Send(bot_infrastructure_kafka.TopicPrompt, []byte(newChatMsgBusMsg.Json()))
+
+			//newChatMsgBusMsg := types.Communication_interface_incoming_new_chat_reply{
+			//	ChatId: chatId,
+			//	Prompt: string(msg),
+			//}
+
+			prompt, err := openai.Prompt(bot.openaiApiKey, string(msg))
+			if err != nil {
+				return err
+			}
+
+			err = bot.bus.Send(bot_infrastructure_kafka.TopicPrompt, []byte(prompt))
 			if err != nil {
 				return fmt.Errorf("could not send message %q to bus: %w", string(msg), err)
 			}
@@ -126,7 +142,6 @@ func New(opts ...Option) (*Bot, error) {
 	bot.chats = chats
 	bot.ctx = ctx
 	bot.interfaces = comm_interfaces
-	bot.bus = bus
 	bot.prompter = prompter
 	bot.newChatMsgChan = newChatMsgChan
 	bot.newChatChan = newChatChan

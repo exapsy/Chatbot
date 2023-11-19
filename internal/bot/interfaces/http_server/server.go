@@ -54,6 +54,13 @@ func New(args Server_Args) Server {
 
 	// region add endpoints
 
+	if args.NewChatHandler == nil {
+		panic("no chat handler provided to http server")
+	}
+	if args.NewChatMessageHandler == nil {
+		panic("no chat message handler provided to http server")
+	}
+
 	wsReceiveChan := make(chan []byte)
 	server.ws = bot_interfaces_http_ws.New(bot_interfaces_http_ws.Args{
 		ReceiveChan:           wsReceiveChan,
